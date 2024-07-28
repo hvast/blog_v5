@@ -1,10 +1,11 @@
-from flask import Flask,render_template,request,url_for,flash,redirect,session
+from flask import Flask,render_template,request,url_for,flash,redirect,session,jsonify
 import sqlite3,random,smtplib,datetime
 from email.mime.text import MIMEText
 from functools import wraps
 
 # 定义博客系统的名称
 app = Flask(__name__)
+
 # 密钥
 app.config['SECRET_KEY'] = 'This is a string used for encryption'
 
@@ -33,11 +34,18 @@ def get_post(post_id):
 
 # 定义函数，获得登录信息数据库链接
 def get_userInfo_connection():
-    user_connection = sqlite3.connect("userInfo.db")
+    #user_connection = sqlite3.connect("userInfo.db")
     # 使从数据库取出的每条数据都可以当作字典使用
-    user_connection.row_factory = sqlite3.Row
-    return user_connection
-
+    #user_connection.row_factory = sqlite3.Row
+    #return user_connection
+    try:
+        conn = sqlite3.connect('userInfo.db')
+        conn.row_factory = sqlite3.Row
+        return conn
+    except Exception as e:
+        print(f"数据库连接失败: {e}")
+        return None
+    
 # 根据username从数据库中获取uap
 def get_user(username):   # 从数据库中查询用户名称和密码
     user_connection = get_userInfo_connection()
@@ -51,8 +59,8 @@ def welcome():
     return render_template('welcome.html')
 
 # 邮箱验证码
-send_by = ""
-password = ""
+send_by = 'your_email@example.com' 
+send_by_password = 'your_email_password'
 mail_host = "smtp.qq.com"
 port = 465
 
@@ -73,48 +81,68 @@ def send_email(send_to,content,subject='验证码'):
     message['To'] = send_to
     message['subject'] = subject
     smtp = smtplib.SMTP_SSL(mail_host,port,'utf-8')
-    smtp.login(send_by,password)
+    smtp.login(send_by,send_by_password)
     smtp.sendmail(send_by,send_to,message.as_string())
     print('发送成功！')
     print(content)
 # 主函数（获取+发送
 def send_email_code(send_to):
     verificate_code = code()
-    content = str("【验证码】您的验证码是：") + verificate_code + ".如非本人操作，请忽略本条邮件"
+    content = str("【验证码】您的验证码是：") + verificate_code + ".如非本人操作，请忽略本条邮件."
     try:
         send_email(send_to=send_to,content=content)
         return verificate_code
     except Exception as error:
-        print("发送验证码失败",error)
+        #print("发送验证码失败",error)
         return False
 # 储存验证码
-def store_verification_code(email, verificate_code):  
+def store_verification_code(email, verificate_code): 
+    email = email.lower()  # 转换为小写 
     with get_userInfo_connection() as conn:  
         cursor = conn.cursor()  
-        #cursor.execute("DELETE FROM userInfo WHERE email = ?", (email,))  # 清除旧的验证码
-        cursor.execute("UPDATE userInfo SET verificate_code = ?, verificate_code_created = ? WHERE email = ?", (verificate_code, datetime.datetime.now(), email))  
+         # 检查邮箱是否已经存在
+        cursor.execute("SELECT email, verificate_code FROM userInfo WHERE email = ?", (email,))
+        record = cursor.fetchone()
+        if record is None:
+            # 插入新记录
+            cursor.execute('''
+                INSERT INTO userInfo (email, verificate_code, verificate_code_created, username)
+                VALUES (?, ?, ?, ?)
+            ''', (email, verificate_code, datetime.datetime.now().isoformat(), "temp_username"))
+        else:
+            # 更新现有记录
+            cursor.execute('''
+                UPDATE userInfo
+                SET verificate_code = ?, verificate_code_created = ?
+                WHERE email = ?
+            ''', (verificate_code, datetime.datetime.now().isoformat(), email))              
         conn.commit()
+        print(f"验证码存储成功: {verificate_code}，时间: {datetime.datetime.now()}")
+
 # 对比验证
 def verify_code(email, input_verificate_code):  
-    conn = sqlite3.connect('userInfo.db')  
-    cursor = conn.cursor()  
-    cursor.execute("SELECT verificate_code FROM userInfo WHERE email = ?", (email,))  
-    record = cursor.fetchone()   
-    if record is None:  
-        return False  
-    verificate_code = record[0] 
-    if input_verificate_code == verificate_code:
-        return True  
-    else:  
-        return False 
-# 注册
-def sign_up_user(username, password, email):
+    email = request.form.get('email').lower() # 转换为小写
     with get_userInfo_connection() as conn:
-        conn = get_userInfo_connection()
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO userInfo (username, password, email) VALUES (?, ?, ?)', (username, password, email))
-        conn.commit()
-
+        cursor = conn.cursor() 
+        print(f"正在验证邮箱: {email}")  
+        cursor.execute("SELECT verificate_code , verificate_code_created FROM userInfo WHERE email = ?", (email,))  
+        record = cursor.fetchone()   
+        if record is None: 
+            print(f"邮箱 {email} 没有找到记录")
+            return False  
+        verificate_code, created_time = record 
+        print(f"数据库中的验证码: {verificate_code}，时间: {created_time}")
+        #if verificate_code_created:
+            #verificate_code_created = datetime.datetime.fromisoformat(verificate_code_created)
+        #return input_verificate_code == verificate_code
+        if input_verificate_code != verificate_code:
+            #print(f"验证码错误: {input_verificate_code} != {verificate_code}")
+            return False
+        # 检查验证码是否过期，例如：验证码有效期为10分钟
+        #if datetime.datetime.now() - created_time > datetime.timedelta(minutes=10):
+            #print(f"验证码已过期")
+            #return False
+        return True
    
 @app.route('/verificate_code', methods=['POST'])
 def verificate_code():
@@ -122,71 +150,75 @@ def verificate_code():
     if email:
         verificate_code = send_email_code(send_to=email)
         store_verification_code(email, verificate_code)
-        flash(f"验证码发送成功，验证码为{verificate_code}.")
+        return jsonify({'success': True, 'message': '验证码发送成功'}), 200
     else:
-        flash("邮箱不能为空")
-    return render_template('sign_up.html',email=email)
+        return jsonify({'success': False, 'message': '邮箱不能为空'}), 400  
 
 @app.route('/sign_up',methods=('GET','POST')) # 注册
 def sign_up():
-    email = request.args.get('email')
     if request.method == "POST":
         username = request.form.get('username')
         password = request.form.get('password')
         email = request.form.get('email')
         input_verificate_code = request.form.get('input_verificate_code')
+        print(f"收到的验证码: {input_verificate_code}")
         if not username:
             flash('用户名不能为空')
         elif not password:
             flash('密码不能为空')
         elif not email:
-            flash('邮箱不能为空1')
+            flash('邮箱不能为空')
         elif not input_verificate_code:
             flash('验证码不能为空')
         else:
-            with get_userInfo_connection() as user_connection:
-                user_cursor = user_connection.cursor()
-                user_cursor.execute("SELECT * FROM userInfo WHERE email = ?", (email,))
-                existing_email = user_cursor.fetchone()
-                if existing_email:  
-                    flash('用户已存在')
-                elif not verify_code(email, input_verificate_code):
-                    flash('验证码错误')
-                else:
-                    sign_up_user(username, password, email)
-                    #session['username'] = username  
-                    #session['logged_in'] = True  
-                    flash('注册成功！')
-                    # 重定向
-                    return redirect(url_for('index'))
+            if verify_code(email, input_verificate_code):
+                with get_userInfo_connection() as user_connection:
+                    user_cursor = user_connection.cursor()
+                    user_cursor.execute("SELECT username, password FROM userInfo WHERE email = ?", (email,))
+                    existing_user = user_cursor.fetchone()
+                    if existing_user:
+                        existing_username, existing_password = existing_user
+                        if existing_username and existing_password:
+                            # 用户已存在且已设置用户名和密码
+                            flash('用户已存在，请直接登录')
+                            return redirect(url_for('login'))          
+                        else:
+                            # 邮箱存在但用户名和密码未设置
+                            user_cursor.execute("UPDATE userInfo SET username = ?, password = ? WHERE email = ?", 
+                                                (username, password, email))
+                            user_connection.commit()
+                            session['username'] = username
+                            session['logged_in'] = True
+                            flash('注册成功！')
+                            return redirect(url_for('index'))    
+            else:
+                flash('验证码错误!')
     return render_template('sign_up.html')       
-
-
-
 
 @app.route('/login',methods=('GET','POST')) # 登录
 def login():
     if request.method == "POST":
         user_connection = get_userInfo_connection()  
         cursor = user_connection.cursor()
-        username = request.form['username'] # 接收form表单传参
+        email = request.form['email'] # 接收form表单传参
         password = request.form['password']
-        if not username:
-            flash('用户名不能为空')
+        if not email:
+            flash('邮箱不能为空')
         elif not password:
             flash('密码不能为空')
         else:
             # 对比！！！！！
-            cursor.execute("SELECT * FROM userInfo WHERE username = ?", (username,))  
-            existing_user = cursor.fetchone()  
-            if existing_user and existing_user['password'] == password: 
+            cursor.execute("SELECT * FROM userInfo WHERE email = ?", (email,))  
+            existing_user = cursor.fetchone() 
+            username = existing_user['username']
+            if existing_user['email'] == email and existing_user['password'] == password: 
                 flash('登录成功！')  
                 user_connection.close()  
                 session['username'] = username
                 session['logged_in'] = True
                 return redirect(url_for('index'))    
             else:  
-                flash('账号或密码错误')  
+                flash('邮箱或密码错误')  
     return render_template('login.html')
     
 @app.route('/logout')
@@ -196,6 +228,40 @@ def logout():
     session.pop('username', None)
     flash('您已成功退出登录')
     return redirect(url_for('login'))
+
+@app.route('/reset_password',methods=('GET','POST')) # 重置密码
+def reset_password():
+    if request.method == "POST":
+        email = request.form.get('email')
+        password = request.form.get('password')
+        input_verificate_code = request.form.get('input_verificate_code') 
+        print(f"收到的验证码: {input_verificate_code}")
+        if not email:
+            flash('邮箱不能为空')
+        elif not input_verificate_code:
+            flash('验证码不能为空')
+        elif not password:
+            flash('密码不能为空')
+        else:
+            if verify_code(email, input_verificate_code):
+                with get_userInfo_connection() as user_connection:
+                    user_cursor = user_connection.cursor()
+                    user_cursor.execute("UPDATE userInfo SET  password = ? WHERE email = ?", 
+                                        ( password, email))
+                    user_connection.commit()
+                    # 查询更新后的用户信息
+                    user_cursor.execute("SELECT * FROM userInfo WHERE email = ?", (email,))
+                    updated_user = user_cursor.fetchone()
+                    #print(f"更新之后的用户信息: {updated_user}")
+                     # 更新 session 并重定向到登录页面
+                    session['logged_in'] = True
+                    session['username'] = updated_user[4] # 用户名在 userInfo 表的第4列
+                    flash('重置成功！')
+                    return redirect(url_for('login'))    
+            else:
+                flash('验证码错误!')
+    return render_template('reset_password.html')  
+
 
 # 装饰器，表示调用内部网址，到达对应页面
 @app.route('/index')
@@ -286,3 +352,6 @@ def delete(post_id):
     connection.close()
     flash('文章《"{}"》删除成功！'.format(post['title']))
     return redirect(url_for('index'))
+
+
+app.run(port=5000, debug=True)

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>修改文章</h1>
+    <hr>
+
+    <!--flash提示语-->
+    <div class="container">
+        {% for message in get_flashed_messages() %}
+        <div class="alert alert-danger">{{ message }}</div>
+        {% endfor %}
+        {% block content %} {% endblock %}
+    </div>
+
+    <hr>
+    <!--method="post"：提交表单数据以保存到数据库，提交的数据不会显示在浏览器的地址栏中，也不会被添加到浏览器的历史记录中，从而提高了数据的安全性-->
+    <form method="post"> 
+        <div class="form-group">
+            <label for="title">标题</label>
+            <br>
+            <!--此处value表示，如果文章已被修改，则使用request中的内容，若未被修改，则使用post中的内容-->
+            <input type="text" name="title" placeholder="请输入标题" value="{{ request.form['title'] or post['title']}}">
+        </div>
+        <br>
+        <div class="form-group">
+            <label for="content">内容</label>
+            <br>
+            <!--textarea：创建多行文本输入区域-->
+            <textarea name="content" placeholder="请输入文章内容">{{ request.form['content'] or post['content']}}</textarea>
+        </div>
+        <br>
+        <div class="form-group">
+            <button type="submit">提交</button>
+        </div>
+    </form>    
+
+    
+
+</body>
+</html>
+

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>邮箱验证</h1> 
+
+    <hr>
+    <!--flash提示语-->
+    <div class="container">
+        {% for message in get_flashed_messages() %}
+        <div class="alert alert-danger">{{ message }}</div>
+        {% endfor %}
+        {% block content %} {% endblock %}
+    </div>
+    <hr>
+
+    <form method="post">
+        <div class="form-userInfo">
+            <label for="email">邮箱：</label>
+            <br>
+            <input type="email" name="email" placeholder="请输入邮箱" value="{{ request.form['email'] }}">
+        </div>
+        <br>
+        <div class="form-userInfo">
+            <label for="input_verficate_code">验证码：</label>
+            <br>
+            <input type="text" name="input_verficate_code" placeholder="请输入邮箱" value="{{ request.form['input_verficate_code'] }}">
+        </div>
+        <div class="form-input_verificate_code">
+            <button type="submit" >发送验证码</button>
+        </div>
+        <br>
+       
+    </form>
+</body>
+</html>

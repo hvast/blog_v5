@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>账号登陆</h1> 
+
+    <hr>
+    <!--flash提示语-->
+    <div class="container">
+        {% for message in get_flashed_messages() %}
+        <div class="alert alert-danger">{{ message }}</div>
+        {% endfor %}
+        {% block content %} {% endblock %}
+    </div>
+    <hr>
+
+    <form method="post">
+        <div class="form-userInfo">
+            <label for="email">邮箱：</label>
+            <br>
+            <input type="email" name="email" id="email" placeholder="请输入邮箱" value="{{ email }}">
+        </div>
+        <br>
+        <div class="form-userInfo">
+            <label for="password">密码：</label>
+            <br>
+            <input type="password" name="password" placeholder="请输入密码" value="{{ request.form['password'] }}">
+        </div>
+        <br>
+        <div class="form-userInfo">
+            <button type="submit">登录</button>
+        </div>
+    </form>
+
+    <a href="{{url_for('sign_up')}}">没有账号？点击注册</a>
+    <a href="{{url_for('reset_password')}}">忘记密码？点击重置</a>
+</body>
+</html>

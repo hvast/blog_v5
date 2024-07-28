@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>账号注册</h1> 
+
+    <hr>
+    <!--flash提示语-->
+    <div class="container">
+        {% for message in get_flashed_messages() %}
+        <div class="alert alert-danger">{{ message }}</div>
+        {% endfor %}
+        {% block content %} {% endblock %}
+    </div>
+    <hr>
+
+    <form method="post" action="/sign_up">
+        <div class="form-userInfo">
+            <label for="email">邮箱：</label>
+            <br>
+            <input type="email" name="email" id="email" placeholder="请输入邮箱" value="{{ email }}">
+        </div>
+        <br>
+        <button type="button" id="sendCodeBtn">发送验证码</button>
+        <br>
+        <br>
+        <div class="form-userInfo">
+            <label for="input_verificate_code">验证码：</label>
+            <br>
+            <input type="text" name="input_verificate_code" id="input_verificate_code" placeholder="请输入验证码">
+        </div>
+        <br>
+        <div class="form-userInfo">
+            <label for="username">用户名：</label>
+            <br>
+            <input type="text" name="username" placeholder="请输入用户名" value="{{ request.form['username'] }}">
+        </div>
+        <br>
+        <div class="form-userInfo">
+            <label for="password">密码：</label>
+            <br>
+            <input type="password" name="password" placeholder="请输入密码" value="{{ request.form['password'] }}">
+        </div>
+        <br>
+        <button type="submit" action="/sign_up">注册</button>
+    </form>
+        
+    </form>
+    <br>
+    <a href="{{url_for('login')}}">已有账号？点击登录</a>
+
+    <script>  
+         $(document).ready(function(){
+            $('#sendCodeBtn').click(function(){
+                var email = $('#email').val();
+                if (email) {
+                    $.ajax({
+                        url: '/verificate_code',  // 后端发送验证码的路由
+                        type: 'POST',
+                        data: { email: email },
+                        success: function(response) {
+                            alert('验证码已发送到您的邮箱');
+                        },
+                        error: function(error) {
+                            alert('发送验证码失败，请重试');
+                        }
+                    });
+                } else {
+                    alert('请输入邮箱');
+                }
+            });
+        });
+    </script>
+    
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+
+    <h2> {{ post['title'] }}</h2>
+
+    <span>{{ post['created'] }}</span>
+
+    <hr>
+    <a href="{{url_for('edit',post_id=post['id'])}}"> 
+        <span>编辑文章</span>
+    </a>
+    <br>
+    <form action="{{url_for('delete',post_id=post['id'])}}" method="POST">
+        <input type="submit" value="删除文章" onclick="return confirm('确认删除文章？')">
+    <hr>
+
+    </form>
+    <p>{{ post['content'] }}</p>
+
+</body>
+</html>
