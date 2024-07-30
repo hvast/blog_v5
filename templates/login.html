@@ -20,15 +20,15 @@
 
     <form method="post">
         <div class="form-userInfo">
-            <label for="email">邮箱：</label>
+            <label for="email_or_username">邮箱或用户名：</label>
             <br>
-            <input type="email" name="email" id="email" placeholder="请输入邮箱" value="{{ email }}">
+            <input type="text" name="email_or_username" id="email_or_username" placeholder="请输入邮箱或用户名" value="{{ request.form.get('email_or_username', '') }}" required>
         </div>
         <br>
         <div class="form-userInfo">
             <label for="password">密码：</label>
             <br>
-            <input type="password" name="password" placeholder="请输入密码" value="{{ request.form['password'] }}">
+            <input type="password" name="password" placeholder="请输入密码" value="{{ request.form['password'] }}" required>
         </div>
         <br>
         <div class="form-userInfo">

@@ -1,5 +1,5 @@
 from flask import Flask,render_template,request,url_for,flash,redirect,session,jsonify
-import sqlite3,random,smtplib,datetime
+import  mysql.connector,random,smtplib,datetime
 from email.mime.text import MIMEText
 from functools import wraps
 
@@ -18,39 +18,34 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# 定义函数，获得文章数据库链接
+# 定义函数，获得数据库链接
 def get_db_connection():
-    connection = sqlite3.connect("database.db")
-    # 使从数据库取出的每条数据都可以当作字典使用
-    connection.row_factory = sqlite3.Row
+    config = {
+        'user': 'your_mysql_user',
+        'password': 'your_mysql_password',
+        'host': 'localhost',
+        'database': 'your_database_name',
+        'raise_on_warnings': True
+    }
+    connection = mysql.connector.connect(**config)
     return connection
 
 # 根据post_id从数据库中获取post
 def get_post(post_id):
     connection = get_db_connection()
-    post = connection.execute('SELECT * FROM posts WHERE id = ?',(post_id,)).fetchone() # ？是占位符，需要将后面的元组填入其中
+    cursor = connection.cursor(dictionary=True)
+    cursor.execute('SELECT * FROM posts WHERE id = %s',(post_id,)) # %s是占位符，需要将后面的元组填入其中
+    post = cursor.fetchone()
     connection.close()
     return post
-
-# 定义函数，获得登录信息数据库链接
-def get_userInfo_connection():
-    #user_connection = sqlite3.connect("userInfo.db")
-    # 使从数据库取出的每条数据都可以当作字典使用
-    #user_connection.row_factory = sqlite3.Row
-    #return user_connection
-    try:
-        conn = sqlite3.connect('userInfo.db')
-        conn.row_factory = sqlite3.Row
-        return conn
-    except Exception as e:
-        print(f"数据库连接失败: {e}")
-        return None
     
 # 根据username从数据库中获取uap
 def get_user(username):   # 从数据库中查询用户名称和密码
-    user_connection = get_userInfo_connection()
-    user = user_connection.execute('SELECT * FROM userInfo WHERE username = ?',(username,)).fetchone() # ？是占位符，需要将后面的元组填入其中
-    user_connection.close()
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute('SELECT * FROM userInfo WHERE username = %s', (username,))
+    user = cursor.fetchone()
+    conn.close()
     return user
 
 @app.route('/')
@@ -97,52 +92,52 @@ def send_email_code(send_to):
         return False
 # 储存验证码
 def store_verification_code(email, verificate_code): 
-    email = email.lower()  # 转换为小写 
-    with get_userInfo_connection() as conn:  
-        cursor = conn.cursor()  
-         # 检查邮箱是否已经存在
-        cursor.execute("SELECT email, verificate_code FROM userInfo WHERE email = ?", (email,))
-        record = cursor.fetchone()
-        if record is None:
-            # 插入新记录
-            cursor.execute('''
-                INSERT INTO userInfo (email, verificate_code, verificate_code_created, username)
-                VALUES (?, ?, ?, ?)
-            ''', (email, verificate_code, datetime.datetime.now().isoformat(), "temp_username"))
-        else:
-            # 更新现有记录
-            cursor.execute('''
-                UPDATE userInfo
-                SET verificate_code = ?, verificate_code_created = ?
-                WHERE email = ?
-            ''', (verificate_code, datetime.datetime.now().isoformat(), email))              
-        conn.commit()
-        print(f"验证码存储成功: {verificate_code}，时间: {datetime.datetime.now()}")
+    email = email.lower()  # 转换为小写
+    conn = get_db_connection() 
+    cursor = conn.cursor()  
+        # 检查邮箱是否已经存在
+    cursor.execute("SELECT email, verificate_code FROM userInfo WHERE email = %s", (email,))
+    record = cursor.fetchone()
+    if record is None:
+        # 插入新记录
+        cursor.execute('''
+            INSERT INTO userInfo (email, verificate_code, verificate_code_created, username)
+            VALUES (%s, %s, %s, %s)
+        ''', (email, verificate_code, datetime.datetime.now().isoformat(), "temp_username"))
+    else:
+        # 更新现有记录
+        cursor.execute('''
+            UPDATE userInfo
+            SET verificate_code = %s, verificate_code_created = %s
+            WHERE email = %s
+        ''', (verificate_code, datetime.datetime.now().isoformat(), email))              
+    conn.commit()
+    print(f"验证码存储成功: {verificate_code}，时间: {datetime.datetime.now()}")
 
 # 对比验证
 def verify_code(email, input_verificate_code):  
     email = request.form.get('email').lower() # 转换为小写
-    with get_userInfo_connection() as conn:
-        cursor = conn.cursor() 
-        print(f"正在验证邮箱: {email}")  
-        cursor.execute("SELECT verificate_code , verificate_code_created FROM userInfo WHERE email = ?", (email,))  
-        record = cursor.fetchone()   
-        if record is None: 
-            print(f"邮箱 {email} 没有找到记录")
-            return False  
-        verificate_code, created_time = record 
-        print(f"数据库中的验证码: {verificate_code}，时间: {created_time}")
-        #if verificate_code_created:
-            #verificate_code_created = datetime.datetime.fromisoformat(verificate_code_created)
-        #return input_verificate_code == verificate_code
-        if input_verificate_code != verificate_code:
-            #print(f"验证码错误: {input_verificate_code} != {verificate_code}")
-            return False
-        # 检查验证码是否过期，例如：验证码有效期为10分钟
-        #if datetime.datetime.now() - created_time > datetime.timedelta(minutes=10):
-            #print(f"验证码已过期")
-            #return False
-        return True
+    conn = get_db_connection()
+    cursor = conn.cursor() 
+    print(f"正在验证邮箱: {email}")  
+    cursor.execute("SELECT verificate_code , verificate_code_created FROM userInfo WHERE email = %s", (email,))  
+    record = cursor.fetchone()   
+    if record is None: 
+        print(f"邮箱 {email} 没有找到记录")
+        return False  
+    verificate_code, created_time = record 
+    print(f"数据库中的验证码: {verificate_code}，时间: {created_time}")
+    #if verificate_code_created:
+        #verificate_code_created = datetime.datetime.fromisoformat(verificate_code_created)
+    #return input_verificate_code == verificate_code
+    if input_verificate_code != verificate_code:
+        #print(f"验证码错误: {input_verificate_code} != {verificate_code}")
+        return False
+    # 检查验证码是否过期，例如：验证码有效期为10分钟
+    #if datetime.datetime.now() - created_time > datetime.timedelta(minutes=10):
+        #print(f"验证码已过期")
+        #return False
+    return True
    
 @app.route('/verificate_code', methods=['POST'])
 def verificate_code():
@@ -172,25 +167,26 @@ def sign_up():
             flash('验证码不能为空')
         else:
             if verify_code(email, input_verificate_code):
-                with get_userInfo_connection() as user_connection:
-                    user_cursor = user_connection.cursor()
-                    user_cursor.execute("SELECT username, password FROM userInfo WHERE email = ?", (email,))
-                    existing_user = user_cursor.fetchone()
-                    if existing_user:
-                        existing_username, existing_password = existing_user
-                        if existing_username and existing_password:
-                            # 用户已存在且已设置用户名和密码
-                            flash('用户已存在，请直接登录')
-                            return redirect(url_for('login'))          
-                        else:
-                            # 邮箱存在但用户名和密码未设置
-                            user_cursor.execute("UPDATE userInfo SET username = ?, password = ? WHERE email = ?", 
-                                                (username, password, email))
-                            user_connection.commit()
-                            session['username'] = username
-                            session['logged_in'] = True
-                            flash('注册成功！')
-                            return redirect(url_for('index'))    
+                conn = get_db_connection()
+                cursor = conn.cursor(dictionary=True)
+                # 查询用户信息，是否存在账号
+                cursor.execute("SELECT username, password FROM userInfo WHERE email = %s", (email,))
+                existing_user = cursor.fetchone()
+                if existing_user:
+                    #existing_username, existing_password = existing_user
+                    if existing_user['username'] != "temp_username" and existing_user['password'] != "NULL":
+                        # 用户已存在且已设置用户名和密码
+                        flash('用户已存在，请直接登录')
+                        return redirect(url_for('login'))          
+                    else:
+                        # 邮箱存在但用户名和密码未设置
+                        cursor.execute("UPDATE userInfo SET username = %s, password = %s WHERE email = %s", 
+                                            (username, password, email))
+                        conn.commit()
+                        session['username'] = username
+                        session['logged_in'] = True
+                        flash('注册成功！')
+                        return redirect(url_for('index'))  
             else:
                 flash('验证码错误!')
     return render_template('sign_up.html')       
@@ -198,22 +194,21 @@ def sign_up():
 @app.route('/login',methods=('GET','POST')) # 登录
 def login():
     if request.method == "POST":
-        user_connection = get_userInfo_connection()  
-        cursor = user_connection.cursor()
-        email = request.form['email'] # 接收form表单传参
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        email_or_username = request.form['email_or_username'] # 接收form表单传参
         password = request.form['password']
-        if not email:
-            flash('邮箱不能为空')
+        if not email_or_username:
+            flash('邮箱或用户名不能为空')
         elif not password:
             flash('密码不能为空')
         else:
             # 对比！！！！！
-            cursor.execute("SELECT * FROM userInfo WHERE email = ?", (email,))  
+            cursor.execute("SELECT * FROM userInfo WHERE (email = %s OR username = %s) AND password = %s",(email_or_username, email_or_username, password))  
             existing_user = cursor.fetchone() 
-            username = existing_user['username']
-            if existing_user['email'] == email and existing_user['password'] == password: 
+            if existing_user : 
+                username = existing_user['username']
                 flash('登录成功！')  
-                user_connection.close()  
                 session['username'] = username
                 session['logged_in'] = True
                 return redirect(url_for('index'))    
@@ -244,20 +239,20 @@ def reset_password():
             flash('密码不能为空')
         else:
             if verify_code(email, input_verificate_code):
-                with get_userInfo_connection() as user_connection:
-                    user_cursor = user_connection.cursor()
-                    user_cursor.execute("UPDATE userInfo SET  password = ? WHERE email = ?", 
-                                        ( password, email))
-                    user_connection.commit()
-                    # 查询更新后的用户信息
-                    user_cursor.execute("SELECT * FROM userInfo WHERE email = ?", (email,))
-                    updated_user = user_cursor.fetchone()
-                    #print(f"更新之后的用户信息: {updated_user}")
-                     # 更新 session 并重定向到登录页面
-                    session['logged_in'] = True
-                    session['username'] = updated_user[4] # 用户名在 userInfo 表的第4列
-                    flash('重置成功！')
-                    return redirect(url_for('login'))    
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("UPDATE userInfo SET  password = %s WHERE email = %s", 
+                                    ( password, email))
+                conn.commit()
+                # 查询更新后的用户信息
+                cursor.execute("SELECT * FROM userInfo WHERE email = %s", (email,))
+                updated_user = cursor.fetchone()
+                #print(f"更新之后的用户信息: {updated_user}")
+                    # 更新 session 并重定向到登录页面
+                session['logged_in'] = True
+                session['username'] = updated_user[4] # 用户名在 userInfo 表的第4列
+                flash('重置成功！')
+                return redirect(url_for('login'))    
             else:
                 flash('验证码错误!')
     return render_template('reset_password.html')  
@@ -280,12 +275,18 @@ def index():
     offset = (page - 1) * per_page
     # 拿到数据库链接
     connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
     # sql语句：取出posts表中的数据(按照created倒排序)
-    posts = connection.execute("select * from posts order by created DESC LIMIT ? OFFSET ?",(per_page, offset)).fetchall()
+    cursor.execute("SELECT * FROM posts ORDER BY created DESC LIMIT %s OFFSET %s",(per_page, offset))
+    posts = cursor.fetchall()
     # 查询总记录数
-    total_posts = connection.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM posts")
+    result = cursor.fetchone()
+    # 使用实际的键名获取计数值
+    total_posts = result['COUNT(*)'] if result else 0
     # 计算总页数
     total_pages = (total_posts + per_page - 1) // per_page
+    print(total_pages,per_page,total_posts)
     # 指定当前页面要访问的index.html;将上行中的posts返回给index页面中的posts变量
     return render_template('index.html',posts=posts,username=username,page=page,total_pages=total_pages,per_page=per_page)
 
@@ -311,7 +312,8 @@ def new():
             flash('内容不能为空')
         else:
             connection = get_db_connection()
-            connection.execute('insert into posts(title,content) values(?,?)',(title,content))
+            cursor = connection.cursor()
+            cursor.execute('INSERT INTO posts (title, content) VALUES (%s, %s)', (title, content))
             # 修改数据库内容后需要提交
             connection.commit()
             connection.close()
@@ -334,8 +336,8 @@ def edit(post_id):
             flash('标题不能为空！')
         else:
             connection = get_db_connection()
-            connection.execute('UPDATE posts SET title = ?,content = ?' 'WHERE id =?',(title,content,post_id))
-            connection.commit()
+            cursor = connection.cursor()
+            cursor.execute('UPDATE posts SET title = %s, content = %s WHERE id = %s', (title, content, post_id))
             connection.close()
             flash('文章修改成功！')
             # 重定向
@@ -347,7 +349,8 @@ def edit(post_id):
 def delete(post_id):
     post = get_post(post_id)
     connection = get_db_connection()
-    connection.execute('DELETE FROM posts WHERE id =?',(post_id,))
+    cursor = connection.cursor()
+    cursor.execute('DELETE FROM posts WHERE id = %s', (post_id,))
     connection.commit()
     connection.close()
     flash('文章《"{}"》删除成功！'.format(post['title']))
