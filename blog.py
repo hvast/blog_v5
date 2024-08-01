@@ -357,11 +357,10 @@ def post(post_id):
 @login_required
 def new():
     username = session['username']
-    #userid = session['userid'] 
+    userid = session['userid'] 
     if request.method == "POST":
         title = request.form['title']
         content = request.form['content']
-        userid = session['userid']  # 获取当前用户的ID
         if not title:
             flash('标题不能为空')
         elif not content:
