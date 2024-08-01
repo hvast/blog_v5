@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>舟行泱泱</title>
+</head>
+<body>
+    <div class="welcome"></div>
+        {% if username %}  
+        <p>你好， {{ username }}!</p>  
+    {% else %}  
+        <p>你好， guest!</p>  
+    {% endif %}  
+        <h1>欢迎访问我的博客</h1> 
+    </div>
+
+    <div class="nav">
+        <a href="{{url_for('user_posts',userid=userid)}}">我的空间</a>
+        <a href="{{url_for('index')}}">博客推荐</a>
+        <a href="{{url_for('userlist')}}">用户列表</a>
+        <a href="{{url_for('new')}}">发表文章</a>
+        <a href="{{url_for('logout')}}">退出登录</a>
+    </div>
+    
+   
+    <hr>
+    <!--flash提示语-->
+    <div class="container">
+        {% for message in get_flashed_messages() %}
+        <div class="alert alert-danger">{{ message }}</div>
+        {% endfor %}
+        {% block content %} {% endblock %}
+    </div>
+    <hr>
+
+    <h2>目前已有{{total_items}}人在此完成注册</h2>
+
+    <!-- 显示帖子 -->
+    <ul>
+        {% for user in users %}
+            <!--跳转至对应的用户主页，同时将变量userid赋值为循环中的post的id值-->
+            <a href="{{url_for('user_posts',userid=user['userid'])}}"> 
+            <h2>{{ user['username'] }}</h2>
+    </a>
+    <hr>
+        {% endfor %}
+    </ul>
+    
+  
+</body>
+</html>

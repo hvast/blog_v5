@@ -12,15 +12,15 @@
     {% else %}  
         <p>你好， guest!</p>  
     {% endif %}  
-        <h1>欢迎访问我的博客</h1> 
+        <h1>欢迎访问我的博客！</h1> 
+        <h2>{{ access_to_username }} 目前已创作{{ total_items }}篇博客</h2>
     </div>
 
-
     <div class="nav">
-        <a href="{{url_for('user_posts',userid=userid,username=username)}}">我的空间</a>
-        <a href="{{url_for('index',userid=userid,username=username)}}">博客推荐</a>
-        <a href="{{url_for('userlist',userid=userid,username=username)}}">用户列表</a>
-        <a href="{{url_for('new',userid=userid,username=username)}}">发表文章</a>
+        <a href="{{url_for('user_posts', userid=userid)}}">我的空间</a>
+        <a href="{{url_for('index')}}">博客推荐</a>
+        <a href="{{url_for('userlist')}}">用户列表</a>
+        <a href="{{url_for('new')}}">发表文章</a>
         <a href="{{url_for('logout')}}">退出登录</a>
     </div>
     
@@ -36,34 +36,12 @@
     <hr>
 
 
-
     <!-- 分页设置表单 -->
-    <form method="get" action="{{ url_for('index') }}">
+    <form method="get" action="{{ url_for('user_posts', userid=userid)}}">
         <label for="per_page">每页显示:</label>
         <input type="number" id="per_page" name="per_page" value="{{ per_page }}" min="1">
         <input type="submit" value="更新">
     </form>
-
-    <br>
-    
-    <!-- 文章排列顺序 -->
-    <!-- 排序列选择 -->  
-    <label for="sortColumn">Sort by:</label>  
-    <select id="sortColumn">  
-        <option value="id">ID</option>  
-        <option value="title">title</option>   
-    </select>  
-    
-    <!-- 排序方向选择 -->  
-    <label>Order:</label> 
-    <input type="radio" id="desc" name="逆序" value="DESC" checked>  
-    <label for="desc">DESC</label>   
-    <input type="radio" id="asc" name="顺序" value="ASC">  
-    <label for="asc">ASC</label>  
-
-    <!-- 触发数据请求的按钮 -->  
-    <button onclick="fetchData()">Fetch Data</button>  
-
 
     <!-- 显示帖子 -->
     <ul>
@@ -80,13 +58,13 @@
     <!-- 分页控件 -->
     <div>
         {% if page > 1 %}
-            <a href="{{ url_for('index', page=page-1, per_page=per_page) }}">上一页</a>
+            <a href="{{ url_for('user_posts',userid=userid, page=page-1, per_page=per_page) }}">上一页</a>
         {% endif %}
 
         页 {{ page }} / {{ total_pages }}
 
         {% if page < total_pages %}
-            <a href="{{ url_for('index', page=page+1, per_page=per_page) }}">下一页</a>
+            <a href="{{ url_for('user_posts',userid=userid,page=page+1, per_page=per_page) }}">下一页</a>
         {% endif %}
     </div>
     

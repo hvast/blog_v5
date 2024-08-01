@@ -1,0 +1,8 @@
+# Blog 🚀 requirements
+# Usage: pip install -r requirements.txt
+
+# Base ------------------------------------------------------------------------
+Flask>=2.0.0  # Web framework
+mysql-connector-python>=8.0.0  # MySQL connector for Python
+requests  # For making HTTP requests
+python-dotenv # Store privacy information

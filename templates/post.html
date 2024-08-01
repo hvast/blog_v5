@@ -6,15 +6,44 @@
     <title>Document</title>
 </head>
 <body>
+    <div class="welcome"></div>
+        {% if username %}  
+        <p>你好， {{ username }}!</p>  
+    {% else %}  
+        <p>你好， guest!</p>  
+    {% endif %}  
+        <h1>欢迎访问我的博客</h1> 
+    </div>
+
+
+    <div class="nav">
+        <a href="{{url_for('user_posts',userid=userid,username=username)}}">我的空间</a>
+        <a href="{{url_for('index',userid=userid,username=username)}}">博客推荐</a>
+        <a href="{{url_for('userlist',userid=userid,username=username)}}">用户列表</a>
+        <a href="{{url_for('new',userid=userid,username=username)}}">发表文章</a>
+        <a href="{{url_for('logout')}}">退出登录</a>
+    </div>
+    <hr>
+
+    <!--flash提示语-->
+    <div class="container">
+        {% for message in get_flashed_messages() %}
+        <div class="alert alert-danger">{{ message }}</div>
+        {% endfor %}
+        {% block content %} {% endblock %}
+    </div>
+    <hr>
+    
 
     <h2> {{ post['title'] }}</h2>
-
+    <h4>作者： {{ author }}</h4>
     <span>{{ post['created'] }}</span>
 
     <hr>
     <a href="{{url_for('edit',post_id=post['id'])}}"> 
         <span>编辑文章</span>
     </a>
+    <br>
     <br>
     <form action="{{url_for('delete',post_id=post['id'])}}" method="POST">
         <input type="submit" value="删除文章" onclick="return confirm('确认删除文章？')">

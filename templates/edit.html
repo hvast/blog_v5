@@ -6,6 +6,25 @@
     <title>Document</title>
 </head>
 <body>
+    <div class="welcome"></div>
+        {% if username %}  
+        <p>你好， {{ username }}!</p>  
+    {% else %}  
+        <p>你好， guest!</p>  
+    {% endif %}  
+        <h1>欢迎访问我的博客</h1> 
+    </div>
+
+
+    <div class="nav">
+        <a href="{{url_for('user_posts',userid=userid,username=username)}}">我的空间</a>
+        <a href="{{url_for('index',userid=userid,username=username)}}">博客推荐</a>
+        <a href="{{url_for('userlist',userid=userid,username=username)}}">用户列表</a>
+        <a href="{{url_for('new',userid=userid,username=username)}}">发表文章</a>
+        <a href="{{url_for('logout')}}">退出登录</a>
+    </div>
+    <hr>
+
     <h1>修改文章</h1>
     <hr>
 

@@ -2,6 +2,11 @@ from flask import Flask,render_template,request,url_for,flash,redirect,session,j
 import  mysql.connector,random,smtplib,datetime
 from email.mime.text import MIMEText
 from functools import wraps
+from dotenv import load_dotenv
+import os
+
+# 加载 .env 文件中的环境变量
+load_dotenv('/root/blog_v5/privacyInfo.env')
 
 # 定义博客系统的名称
 app = Flask(__name__)
@@ -21,10 +26,10 @@ def login_required(f):
 # 定义函数，获得数据库链接
 def get_db_connection():
     config = {
-        'user': 'your_mysql_user',
-        'password': 'your_mysql_password',
-        'host': 'localhost',
-        'database': 'your_database_name',
+        'user': os.getenv('DB_USER'),
+        'password': os.getenv('DB_PASSWORD'),
+        'host': os.getenv('DB_HOST'),
+        'database': os.getenv('DB_DATABASE'),
         'raise_on_warnings': True
     }
     connection = mysql.connector.connect(**config)
@@ -38,15 +43,21 @@ def get_post(post_id):
     post = cursor.fetchone()
     connection.close()
     return post
-    
-# 根据username从数据库中获取uap
-def get_user(username):   # 从数据库中查询用户名称和密码
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute('SELECT * FROM userInfo WHERE username = %s', (username,))
+
+#根据username/email获取用户信息
+def get_user(email_or_username):
+    connection = get_db_connection()
+    cursor = connection.cursor(dictionary=True)
+    # 判断 identifier 是否是邮箱
+    if '@' in email_or_username:
+        cursor.execute('SELECT * FROM userInfo WHERE email = %s', (email_or_username,))
+    else:
+        cursor.execute('SELECT * FROM userInfo WHERE username = %s', (email_or_username,))
     user = cursor.fetchone()
-    conn.close()
+    cursor.close()
+    connection.close()
     return user
+
 
 @app.route('/')
 # 定义函数，一个函数代表一个网页页面
@@ -54,8 +65,8 @@ def welcome():
     return render_template('welcome.html')
 
 # 邮箱验证码
-send_by = 'your_email@example.com' 
-send_by_password = 'your_email_password'
+send_by = os.getenv('send_by')
+send_by_password = os.getenv('send_by_password')
 mail_host = "smtp.qq.com"
 port = 465
 
@@ -183,10 +194,13 @@ def sign_up():
                         cursor.execute("UPDATE userInfo SET username = %s, password = %s WHERE email = %s", 
                                             (username, password, email))
                         conn.commit()
-                        session['username'] = username
-                        session['logged_in'] = True
                         flash('注册成功！')
-                        return redirect(url_for('index'))  
+                        email_or_username = request.form.get('email')
+                        user = get_user(email_or_username)
+                        session['logged_in'] = True
+                        session['username'] = user['username']
+                        session['userid'] = user['userid']  # 将用户ID存储到会话中
+                        return redirect(url_for('user_posts',userid=session['userid']))  
             else:
                 flash('验证码错误!')
     return render_template('sign_up.html')       
@@ -194,8 +208,6 @@ def sign_up():
 @app.route('/login',methods=('GET','POST')) # 登录
 def login():
     if request.method == "POST":
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
         email_or_username = request.form['email_or_username'] # 接收form表单传参
         password = request.form['password']
         if not email_or_username:
@@ -203,20 +215,21 @@ def login():
         elif not password:
             flash('密码不能为空')
         else:
-            # 对比！！！！！
-            cursor.execute("SELECT * FROM userInfo WHERE (email = %s OR username = %s) AND password = %s",(email_or_username, email_or_username, password))  
-            existing_user = cursor.fetchone() 
-            if existing_user : 
-                username = existing_user['username']
-                flash('登录成功！')  
-                session['username'] = username
-                session['logged_in'] = True
-                return redirect(url_for('index'))    
-            else:  
-                flash('邮箱或密码错误')  
+            user = get_user(email_or_username)
+            if user is None:
+                flash('用户不存在')  # 处理找不到用户的情况
+            else:
+                if (email_or_username == user['email'] or email_or_username == user['username']) and password == user['password']:
+                    flash('登录成功！')  
+                    session['logged_in'] = True
+                    session['username'] = user['username']
+                    session['userid'] = user['userid']  # 将用户ID存储到会话中
+                    return redirect(url_for('user_posts', userid=session['userid']))    
+                else:  
+                    flash('邮箱或密码错误')  
     return render_template('login.html')
     
-@app.route('/logout')
+@app.route('/logout') # 退出登录页面
 @login_required
 def logout():
     session.pop('logged_in', None)
@@ -257,55 +270,98 @@ def reset_password():
                 flash('验证码错误!')
     return render_template('reset_password.html')  
 
-
-# 装饰器，表示调用内部网址，到达对应页面
-@app.route('/index')
-# 定义函数，一个函数代表一个网页页面
-@login_required
-def index():
-    if 'logged_in' in session and session['logged_in']:  
-        username = session['username']  
-    else:  
-        username=None
-
-    # 获取分页参数
-    per_page = int(request.args.get('per_page', 10))  # 默认每页显示10条
-    page = int(request.args.get('page', 1))  # 默认当前页为1
+def paging(tablename,userid,per_page,page,order_column='id',order_direction='DESC',where_clause='N'): #分页
     # 计算偏移量
     offset = (page - 1) * per_page
     # 拿到数据库链接
     connection = get_db_connection()
     cursor = connection.cursor(dictionary=True)
-    # sql语句：取出posts表中的数据(按照created倒排序)
-    cursor.execute("SELECT * FROM posts ORDER BY created DESC LIMIT %s OFFSET %s",(per_page, offset))
-    posts = cursor.fetchall()
-    # 查询总记录数
-    cursor.execute("SELECT COUNT(*) FROM posts")
+
+    if where_clause == 'N':
+        # sql语句：取出posts表中所有的数据
+        cursor.execute(f"SELECT * FROM `{tablename}` ORDER BY `{order_column}` {order_direction} LIMIT %s OFFSET %s",(per_page, offset))
+        items = cursor.fetchall()
+        # 查询总记录数
+        cursor.execute(f"SELECT COUNT(*) FROM `{tablename}`")
+    else:
+        # sql语句：取出posts表中userid为登录时储存的数据的posts
+        cursor.execute(f"SELECT * FROM `{tablename}` WHERE userid = %s ORDER BY `{order_column}` {order_direction} LIMIT %s OFFSET %s",(userid,per_page, offset))
+        items = cursor.fetchall()
+        # 查询总记录数
+        cursor.execute(f"SELECT COUNT(*) FROM `{tablename}` WHERE userid = %s", (userid,))
     result = cursor.fetchone()
     # 使用实际的键名获取计数值
-    total_posts = result['COUNT(*)'] if result else 0
+    total_items = result['COUNT(*)'] if result else 0
     # 计算总页数
-    total_pages = (total_posts + per_page - 1) // per_page
-    print(total_pages,per_page,total_posts)
-    # 指定当前页面要访问的index.html;将上行中的posts返回给index页面中的posts变量
-    return render_template('index.html',posts=posts,username=username,page=page,total_pages=total_pages,per_page=per_page)
+    total_pages = (total_items + per_page - 1) // per_page
+    return items,total_pages,total_items
 
-@app.route('/posts/<int:post_id>') # <>表示内部内容可变
+# 装饰器，表示调用内部网址，到达对应页面
+@app.route('/index')  # 博客推荐页面（存储所有博客）
+# 定义函数，一个函数代表一个网页页面
+@login_required
+def index():
+    userid = session['userid']
+    per_page = int(request.args.get('per_page', 10))  # 默认每页显示10条
+    page = int(request.args.get('page', 1))  # 默认当前页为1
+    posts, total_pages ,total_items = paging(tablename='posts',userid=userid, per_page=per_page, page=page, order_column='title',order_direction='ASC',where_clause='N')
+    # 指定当前页面要访问的index.html;将上行中的posts返回给index页面中的posts变量
+    return render_template('index.html',userid=userid,username=session['username'],per_page=per_page,page=page,posts=posts,total_pages=total_pages,total_items=total_items)
+
+@app.route('/user_posts/<int:userid>') # 用户空间页面，存储该用户发布的博客
+@login_required
+def user_posts(userid):
+    username = session['username']
+    # 找到userid对应的username，用于前端页面显示
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    access_to_userid = userid
+    cursor.execute('SELECT * FROM userInfo WHERE userid = %s',(access_to_userid,)) 
+    access_to_user = cursor.fetchone()
+    access_to_username = access_to_user['username']
+    conn.close()
+    # 分页
+    per_page = int(request.args.get('per_page', 10))  # 默认每页显示10条
+    page = int(request.args.get('page', 1))  # 默认当前页为1
+    posts, total_pages ,total_items= paging(tablename='posts', userid=userid, per_page=per_page, page=page, order_column='id', order_direction='DESC', where_clause='Y')
+    return render_template('user_posts.html', access_to_username=access_to_username,username=username,userid=userid,per_page=per_page,page=page,posts=posts,total_pages=total_pages,total_items=total_items)
+
+# 装饰器，表示调用内部网址，到达对应页面
+@app.route('/userlist')  # 用户列表页面，展示所有注册的用户
+# 定义函数，一个函数代表一个网页页面
+@login_required
+def userlist():
+    username = session['username']  
+    userid = session['userid'] 
+    per_page = int(request.args.get('per_page', 10))  # 默认每页显示10条
+    page = int(request.args.get('page', 1))  # 默认当前页为1
+    users, total_pages ,total_items= paging(tablename='userInfo',userid=userid, per_page=per_page, page=page, order_column='userid', order_direction='DESC', where_clause='N')
+    return render_template('userlist.html',userid=userid,username=username,per_page=per_page,page=page,users=users,total_pages=total_pages,total_items=total_items)
+
+@app.route('/posts/<int:post_id>') # <>表示内部内容可变；post页面
 @login_required
 def post(post_id):
+    username = session['username']
+    userid = session['userid'] 
     post = get_post(post_id)
-    return render_template('post.html', post=post)
+    #找到userid对应的username
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute('SELECT * FROM userInfo WHERE userid = %s',(post['userid'],)) # %s是占位符，需要将后面的元组填入其中
+    user = cursor.fetchone()
+    author = user['username']
+    conn.close()
+    return render_template('post.html', post=post,userid=userid,username=username,author=author)
 
 @app.route('/posts/new',methods=('GET','POST')) # 同时支持get和post请求
 @login_required
 def new():
-    if 'logged_in' not in session or not session['logged_in']:  
-        return redirect(url_for('login'))
-    
+    username = session['username']
+    #userid = session['userid'] 
     if request.method == "POST":
         title = request.form['title']
         content = request.form['content']
-
+        userid = session['userid']  # 获取当前用户的ID
         if not title:
             flash('标题不能为空')
         elif not content:
@@ -313,48 +369,61 @@ def new():
         else:
             connection = get_db_connection()
             cursor = connection.cursor()
-            cursor.execute('INSERT INTO posts (title, content) VALUES (%s, %s)', (title, content))
+            cursor.execute('INSERT INTO posts (userid,title, content) VALUES (%s,%s, %s)', (userid,title, content))
             # 修改数据库内容后需要提交
             connection.commit()
             connection.close()
             flash('文章保存成功！')
             # 重定向
-            return redirect(url_for('index'))
-    return render_template('new.html')
+            return redirect(url_for('user_posts',userid=session['userid'],username=username))
+    return render_template('new.html',userid=userid,username=username)
 
     
 @app.route('/posts/<int:post_id>/edit',methods=('GET','POST'))
 @login_required
 def edit(post_id):
+    username = session['username']
+    userid = session['userid']
     post = get_post(post_id)
-
+    if session['userid'] != post['userid']:
+        print(f"Attempted edit by user {session['userid']} on post {post['userid']}")
+        flash('您没有修改权限！', 'error')
+        return redirect(url_for('post', post_id=post_id))
     if request.method =='POST':
         title = request.form['title']
         content = request.form['content']
-
         if not title:
-            flash('标题不能为空！')
+            flash('标题不能为空！', 'error')
+            return render_template('edit.html',post=post,userid=userid,username=username)
         else:
             connection = get_db_connection()
             cursor = connection.cursor()
             cursor.execute('UPDATE posts SET title = %s, content = %s WHERE id = %s', (title, content, post_id))
+            connection.commit()  # 确保提交更改
             connection.close()
             flash('文章修改成功！')
             # 重定向
-            return redirect(url_for('index'))
-    return render_template('edit.html',post=post)
+            return redirect(url_for('user_posts',userid=session['userid']))
+    return render_template('edit.html', post=post, userid=userid, username=username)
+   
 
 @app.route('/posts/<int:post_id>/delete',methods=('POST',)) # 后台增加或减少，一般用post，get容易被爬;post请求无法通过在上方输入链接直达对应页面
 @login_required
 def delete(post_id):
+    username = session['username']
+    userid = session['userid']
     post = get_post(post_id)
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.execute('DELETE FROM posts WHERE id = %s', (post_id,))
-    connection.commit()
-    connection.close()
-    flash('文章《"{}"》删除成功！'.format(post['title']))
-    return redirect(url_for('index'))
+    if session['userid'] != post['userid']:
+        flash('您没有删除权限！')
+        return redirect(url_for('post', post_id=post_id,userid=userid))
+    else:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute('DELETE FROM posts WHERE id = %s', (post_id,))
+        connection.commit()
+        connection.close()
+        flash('文章《"{}"》删除成功！'.format(post['title']))
+        return redirect(url_for('user_posts',userid=session['userid'],username=username))   
 
 
-app.run(port=5000, debug=True)
+app.run(host="0.0.0.0",port=5000, debug=True)
