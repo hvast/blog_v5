@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import os
 
 # 加载 .env 文件中的环境变量
-load_dotenv('/root/blog_v5/privacyInfo.env')
+load_dotenv('/root/blog_v5/venv/privacyInfo.env')
 
 # 创建数据库链接
 connection = mysql.connector.connect(

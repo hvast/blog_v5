@@ -6,12 +6,7 @@ from dotenv import load_dotenv
 import os
 
 # 加载 .env 文件中的环境变量
-load_dotenv('/root/blog_v5/privacyInfo.env')
-from dotenv import load_dotenv
-import os
-
-# 加载 .env 文件中的环境变量
-load_dotenv('/root/blog_v5/privacyInfo.env')
+load_dotenv('/root/blog_v5/venv/privacyInfo.env')
 
 # 定义博客系统的名称
 app = Flask(__name__)
